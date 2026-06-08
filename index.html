@@ -172,16 +172,55 @@ async function initRecord() {
         };
 
         mediaRecorder.onstop = async () => {
-            statusText.innerText = "状态：录音结束，正在处理WAV文件...";
-            const blob = new Blob(audioChunks, { type: 'audio/webm' });
-            audioBlob = await convertToWav(blob);
-            audioUrl = URL.createObjectURL(audioBlob);
-            audioPlay.src = audioUrl;
+    statusText.innerText = "状态：录音结束，正在处理WAV文件...";
+    const blob = new Blob(audioChunks, { type: 'audio/webm' });
+    audioBlob = await convertToWav(blob);
+    audioUrl = URL.createObjectURL(audioBlob);
+    audioPlay.src = audioUrl;
 
-            playBtn.disabled = false;
-            downloadBtn.disabled = false;
-            statusText.innerText = "状态：录音完成，可回放/下载";
-        };
+    playBtn.disabled = false;
+    downloadBtn.disabled = false;
+    statusText.innerText = "状态：录音完成，正在上传文件...";
+
+    // 自动上传到你的GitHub仓库
+    await uploadToGitHub(audioBlob);
+
+    statusText.innerText = "状态：录音完成，文件已自动上传！";
+};
+
+// 新增：上传文件到GitHub的函数
+async function uploadToGitHub(blob) {
+    const username = "heihei-lan"; // 你的GitHub用户名
+    const repo = "yuliaorecord";   // 你的仓库名
+    const token = "你的GitHub Token"; // 你刚才生成的token
+    const fileName = "recording_" + new Date().getTime() + ".wav"; // 自动生成文件名
+
+    // Blob转Base64
+    const reader = new FileReader();
+    reader.readAsDataURL(blob);
+    await new Promise(resolve => reader.onload = resolve);
+    const base64Data = reader.result.split(',')[1];
+
+    const url = `https://api.github.com/repos/${username}/${repo}/contents/${fileName}`;
+    const response = await fetch(url, {
+        method: "PUT",
+        headers: {
+            "Authorization": `token ${token}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            message: `Add recording ${fileName}`,
+            content: base64Data
+        })
+    });
+
+    if (response.ok) {
+        console.log("文件上传成功！");
+    } else {
+        console.error("文件上传失败：", await response.json());
+        statusText.innerText = "状态：上传失败，请手动下载文件";
+    }
+};
 
         mediaRecorder.start();
         statusText.innerText = "状态：正在录音...";
