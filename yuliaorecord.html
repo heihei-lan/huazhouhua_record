@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>方言单字音录音采集</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:"Microsoft Yahei",sans-serif;}
+        body{max-width:800px;margin:20px auto;padding:0 15px;background:#f5f7fa;}
+        .box{background:#fff;padding:25px;border-radius:10px;box-shadow:0 2px 8px #eee;}
+        h2{text-align:center;color:#333;margin-bottom:20px;}
+        .tip{background:#fff3cd;padding:12px;border-radius:6px;margin-bottom:20px;line-height:1.6;color:#856404;}
+        .text-area{border:1px solid #ccc;padding:15px;min-height:300px;border-radius:6px;margin-bottom:20px;line-height:1.8;font-size:16px;white-space:pre-wrap;}
+        .btn-group{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;}
+        button{padding:10px 24px;border:none;border-radius:6px;font-size:16px;cursor:pointer;transition:0.2s;}
+        .start{background:#28a745;color:#fff;}
+        .stop{background:#dc3545;color:#fff;}
+        .play{background:#007bff;color:#fff;}
+        .download{background:#6c757d;color:#fff;}
+        button:disabled{opacity:0.6;cursor:not-allowed;}
+        .status{margin:15px 0;font-size:15px;color:#555;}
+        audio{width:100%;margin:10px 0;}
+
+        /* 横向音量条样式 */
+        .volume-wrap {
+            width: 100%;
+            height: 24px;
+            background: #e9ecef;
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 8px 0 15px;
+            border: 1px solid #ddd;
+        }
+        .volume-bar {
+            width: 0%;
+            height: 100%;
+            transition: width 0.04s ease-out;
+            background: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>单字音朗读录音</h2>
+
+        <div class="tip">
+            <strong>朗读规范（请严格遵守）：</strong><br>
+            1. 逐字单独朗读，一字一顿，不要组词、不要连读；<br>
+            2. 语速自然平稳，读错可重读该字；<br>
+            3. 环境保持安静，手机/电脑麦克风距离口鼻15~20cm；<br>
+            4. 录制完成后试听，确认无误再下载文件提交。
+        </div>
+
+        <div class="text-area" id="wordList">
+请把这里的文字替换成你的1000-2000个调查汉字
+建议分段排版，一行若干字，方便朗读
+        </div>
+
+        <div class="btn-group">
+            <button class="start" id="startBtn">开始录音</button>
+            <button class="stop" id="stopBtn" disabled>停止录音</button>
+            <button class="play" id="playBtn" disabled>回放试听</button>
+            <button class="download" id="downloadBtn" disabled>下载WAV文件</button>
+        </div>
+
+        <div class="status" id="status">状态：等待开始录音</div>
+
+        <!-- 横向音量条 -->
+        <div class="volume-wrap">
+            <div class="volume-bar" id="volumeBar"></div>
+        </div>
+
+        <audio id="audioPlay" controls>
+    </div>
+
+<script>
+// ========== 固定录音参数：44100Hz / 16bit / 单声道 WAV ==========
+const CONFIG = {
+    sampleRate: 44100,
+    channelCount: 1,
+    sampleSize: 16
+};
+
+let mediaRecorder = null;
+let audioChunks = [];
+let audioBlob = null;
+let audioUrl = null;
+
+// 音量相关变量
+let audioContext = null;
+let analyser = null;
+let dataArray = null;
+let volumeStream = null;
+let isVolumeDetect = false;
+
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const playBtn = document.getElementById('playBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const statusText = document.getElementById('status');
+const audioPlay = document.getElementById('audioPlay');
+const volumeBar = document.getElementById('volumeBar');
+
+// 更新横向音量条
+function updateVolumeBar() {
+    if (!isVolumeDetect || !analyser) {
+        volumeBar.style.width = '0%';
+        return;
+    }
+    analyser.getByteFrequencyData(dataArray);
+    let sum = 0;
+    for (let val of dataArray) sum += val;
+    const avg = sum / dataArray.length;
+    const percent = (avg / 255) * 100;
+
+    volumeBar.style.width = percent + '%';
+    // 音量变色：绿→黄→红
+    if (percent < 30) {
+        volumeBar.style.background = '#28a745';
+    } else if (percent < 70) {
+        volumeBar.style.background = '#ffc107';
+    } else {
+        volumeBar.style.background = '#dc3545';
+    }
+
+    requestAnimationFrame(updateVolumeBar);
+}
+
+// 初始化音量监听
+function initVolumeAnalyser(stream) {
+    volumeStream = stream;
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    const bufferLen = analyser.frequencyBinCount;
+    dataArray = new Uint8Array(bufferLen);
+
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+    isVolumeDetect = true;
+    updateVolumeBar();
+}
+
+// 关闭音量监听
+function closeVolumeAnalyser() {
+    isVolumeDetect = false;
+    if (volumeStream) volumeStream.getTracks().forEach(t => t.stop());
+    if (audioContext) audioContext.close();
+    volumeBar.style.width = '0%';
+}
+
+// 申请麦克风权限 + 初始化录音
+async function initRecord() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                sampleRate: CONFIG.sampleRate,
+                channelCount: CONFIG.channelCount
+            }
+        });
+
+        // 启动音量检测
+        initVolumeAnalyser(stream);
+
+        mediaRecorder = new MediaRecorder(stream, {
+            mimeType: 'audio/webm'
+        });
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = e => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+            statusText.innerText = "状态：录音结束，正在处理WAV文件...";
+            const blob = new Blob(audioChunks, { type: 'audio/webm' });
+            audioBlob = await convertToWav(blob);
+            audioUrl = URL.createObjectURL(audioBlob);
+            audioPlay.src = audioUrl;
+
+            playBtn.disabled = false;
+            downloadBtn.disabled = false;
+            statusText.innerText = "状态：录音完成，可回放/下载";
+        };
+
+        mediaRecorder.start();
+        statusText.innerText = "状态：正在录音...";
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        playBtn.disabled = true;
+        downloadBtn.disabled = true;
+
+    } catch (err) {
+        statusText.innerText = "错误：无法获取麦克风权限，请允许麦克风访问！";
+        console.error(err);
+    }
+}
+
+// 停止录音
+function stopRecord() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        mediaRecorder.stream.getTracks().forEach(track => track.stop());
+    }
+    // 关闭音量监听
+    closeVolumeAnalyser();
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+}
+
+// 回放
+function playAudio() {
+    audioPlay.currentTime = 0;
+    audioPlay.play();
+}
+
+// 下载标准WAV文件
+function downloadWav() {
+    if (!audioBlob) return;
+    const a = document.createElement('a');
+    a.href = audioUrl;
+    a.download = "单字音录音_"+new Date().getTime()+".wav";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+// 转码为 44100Hz 16bit 单声道 WAV
+async function convertToWav(blob) {
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+        sampleRate: CONFIG.sampleRate
+    });
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+    const targetSampleRate = CONFIG.sampleRate;
+    const targetChannels = CONFIG.channelCount;
+    const targetBit = CONFIG.sampleSize;
+
+    const floatData = audioBuffer.getChannelData(0);
+    const length = floatData.length;
+    const byteRate = targetSampleRate * targetChannels * (targetBit / 8);
+    const blockAlign = targetChannels * (targetBit / 8);
+
+    const wavBuffer = new ArrayBuffer(44 + length * 2);
+    const view = new DataView(wavBuffer);
+
+    // RIFF 头部
+    view.setUint8(0, 0x52);view.setUint8(1, 0x49);view.setUint8(2, 0x46);view.setUint8(3, 0x46);
+    view.setUint32(4, 36 + length * 2, true);
+    view.setUint8(8, 0x57);view.setUint8(9, 0x41);view.setUint8(10, 0x56);view.setUint8(11, 0x45);
+    // fmt 块
+    view.setUint8(12, 0x66);view.setUint8(13, 0x6D);view.setUint8(14, 0x74);view.setUint8(15, 0x20);
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, targetChannels, true);
+    view.setUint32(24, targetSampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, targetBit, true);
+    // data 块
+    view.setUint8(36, 0x64);view.setUint8(37, 0x61);view.setUint8(38, 0x74);view.setUint8(39, 0x61);
+    view.setUint32(40, length * 2, true);
+
+    // 浮点转16bit整型
+    let offset = 44;
+    for (let i = 0; i < length; i++) {
+        let sample = Math.max(-1, Math.min(1, floatData[i]));
+        sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+        view.setInt16(offset, sample, true);
+        offset += 2;
+    }
+
+    return new Blob([wavBuffer], { type: 'audio/wav' });
+}
+
+// 绑定按钮事件
+startBtn.addEventListener('click', initRecord);
+stopBtn.addEventListener('click', stopRecord);
+playBtn.addEventListener('click', playAudio);
+downloadBtn.addEventListener('click', downloadWav);
+</script>
+</body>
+</html>
