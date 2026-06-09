@@ -1,323 +1,245 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>方言单字音录音采集</title>
-    <style>
-        *{margin:0;padding:0;box-sizing:border-box;font-family:"Microsoft Yahei",sans-serif;}
-        body{max-width:800px;margin:20px auto;padding:0 15px;background:#f5f7fa;}
-        .box{background:#fff;padding:25px;border-radius:10px;box-shadow:0 2px 8px #eee;}
-        h2{text-align:center;color:#333;margin-bottom:20px;}
-        .tip{background:#fff3cd;padding:12px;border-radius:6px;margin-bottom:20px;line-height:1.6;color:#856404;}
-        .text-area{border:1px solid #ccc;padding:15px;min-height:300px;border-radius:6px;margin-bottom:20px;line-height:1.8;font-size:16px;white-space:pre-wrap;}
-        .btn-group{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;}
-        button{padding:10px 24px;border:none;border-radius:6px;font-size:16px;cursor:pointer;transition:0.2s;}
-        .start{background:#28a745;color:#fff;}
-        .stop{background:#dc3545;color:#fff;}
-        .play{background:#007bff;color:#fff;}
-        .download{background:#6c757d;color:#fff;}
-        button:disabled{opacity:0.6;cursor:not-allowed;}
-        .status{margin:15px 0;font-size:15px;color:#555;}
-        audio{width:100%;margin:10px 0;}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方言例字录音采集 44100Hz</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:"微软雅黑",sans-serif;}
+body{max-width:900px;margin:20px auto;padding:0 20px;line-height:1.8;}
+h2{text-align:center;margin-bottom:20px;color:#333;}
+.page-info{text-align:center;font-size:18px;margin:10px 0;font-weight:bold;}
+.word-box{border:1px solid #ccc;padding:20px;border-radius:8px;min-height:220px;margin:20px 0;font-size:20px;word-break:break-all;}
 
-        /* 横向音量条样式 */
-        .volume-wrap {
-            width: 100%;
-            height: 24px;
-            background: #e9ecef;
-            border-radius: 12px;
-            overflow: hidden;
-            margin: 8px 0 15px;
-            border: 1px solid #ddd;
-        }
-        .volume-bar {
-            width: 0%;
-            height: 100%;
-            transition: width 0.04s ease-out;
-            background: #28a745;
-        }
-    </style>
+.volume-wrap{
+  width: 100%;
+  height: 24px;
+  background: #eee;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 10px 0;
+  border: 1px solid #ddd;
+}
+.volume-bar{
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #2d8cf0, #42b983);
+  transition: width 0.05s linear;
+}
+
+.status{text-align:center;margin:10px 0;font-size:16px;color:#666;}
+.btn-group{text-align:center;margin:20px 0;}
+button{padding:10px 20px;font-size:16px;margin:0 8px;cursor:pointer;border:none;border-radius:4px;background:#2d8cf0;color:#fff;}
+button:disabled{background:#999;cursor:not-allowed;}
+</style>
 </head>
 <body>
-    <div class="box">
-        <h2>单字音朗读录音</h2>
 
-        <div class="tip">
-            <strong>朗读规范（请严格遵守）：</strong><br>
-            1. 逐字单独朗读，一字一顿，不要组词、不要连读；<br>
-            2. 语速自然平稳，读错可重读该字；<br>
-            3. 环境保持安静，手机/电脑麦克风距离口鼻15~20cm；<br>
-            4. 录制完成后试听，确认无误再下载文件提交。
-        </div>
+<h2>方言例字录音采集</h2>
+<div class="page-info">当前页码：<span id="pageNum">01</span> / 20</div>
 
-        <div class="text-area" id="wordList">
-请把这里的文字替换成你的1000-2000个调查汉字
-建议分段排版，一行若干字，方便朗读
-        </div>
+<div class="word-box" id="wordContainer"></div>
 
-        <div class="btn-group">
-            <button class="start" id="startBtn">开始录音</button>
-            <button class="stop" id="stopBtn" disabled>停止录音</button>
-            <button class="play" id="playBtn" disabled>回放试听</button>
-            <button class="download" id="downloadBtn" disabled>下载WAV文件</button>
-        </div>
+<div class="volume-wrap">
+  <div class="volume-bar" id="volumeBar"></div>
+</div>
 
-        <div class="status" id="status">状态：等待开始录音</div>
+<div class="status" id="status">就绪</div>
 
-        <!-- 横向音量条 -->
-        <div class="volume-wrap">
-            <div class="volume-bar" id="volumeBar"></div>
-        </div>
-
-        <audio id="audioPlay" controls>
-    </div>
+<div class="btn-group">
+  <button id="prevBtn" disabled>上一页</button>
+  <button id="startRec">开始录音</button>
+  <button id="stopRec" disabled>结束并下载</button>
+  <button id="nextBtn">下一页</button>
+</div>
 
 <script>
-// ========== 固定录音参数：44100Hz / 16bit / 单声道 WAV ==========
-const CONFIG = {
-    sampleRate: 44100,
-    channelCount: 1,
-    sampleSize: 16
-};
+// 1000个方言例字
+const allWords = [
+"多","拖","大","锣","左","歌","个","可","鹅","饿","河","茄","破","婆","磨","磨","躲","螺","坐","锁",
+"果","过","课","火","货","祸","靴","把","爬","马","骂","茶","沙","假","嫁","牙","虾","下","夏","哑",
+"姐","借","写","斜","谢","车","蛇","射","爷","野","夜","瓜","瓦","花","化","华","谱","布","铺","簿",
+"步","赌","土","图","杜","奴","路","租","做","错","箍","古","苦","裤","吴","五","虎","壶","户","乌",
+"女","吕","徐","猪","除","初","锄","所","书","鼠","如","举","锯","去","渠","鱼","许","余","府","付",
+"父","武","雾","取","柱","住","数","数","主","输","竖","树","句","区","遇","雨","芋","裕","胎","台",
+"袋","来","菜","财","该","改","开","海","爱","贝","带","盖","害","拜","排","埋","戒","摆","派","牌",
+"买","卖","柴","晒","街","解","鞋","蟹","矮","败","币","制","世","艺","米","低","梯","剃","弟","递",
+"泥","犁","西","洗","鸡","溪","契","系","杯","配","赔","背","煤","妹","对","雷","罪","碎","灰","回",
+"外","会","怪","块","怀","坏","拐","挂","歪","画","快","话","岁","卫","肺","桂","碑","皮","被","紫",
+"刺","知","池","纸","儿","寄","骑","蚁","义","戏","移","比","屁","鼻","眉","地","梨","资","死","四",
+"迟","师","指","二","饥","器","姨","李","子","字","丝","祠","寺","治","柿","事","使","试","时","市",
+"耳","记","棋","喜","意","几","气","希","衣","嘴","随","吹","垂","规","亏","跪","危","类","醉","追",
+"锤","水","龟","季","柜","位","飞","费","肥","尾","味","鬼","贵","围","胃","宝","抱","毛","帽","刀",
+"讨","桃","道","脑","老","早","灶","草","糙","造","嫂","高","靠","熬","好","号","包","饱","炮","猫",
+"闹","罩","抓","找","抄","交","敲","孝","校","表","票","庙","焦","小","笑","朝","照","烧","绕","桥",
+"轿","腰","要","摇","鸟","钓","条","料","箫","叫","母","抖","偷","头","豆","楼","走","凑","钩","狗",
+"够","口","藕","后","厚","富","副","浮","妇","流","酒","修","袖","抽","绸","愁","瘦","州","臭","手",
+"寿","九","球","舅","旧","牛","休","优","有","右","油","丢","幼","贪","潭","南","蚕","感","含","暗",
+"搭","踏","拉","杂","鸽","盒","胆","毯","淡","蓝","三","甘","敢","喊","塔","蜡","赚","杉","减","咸",
+"插","闸","夹","衫","监","岩","甲","鸭","黏","尖","签","占","染","钳","验","险","厌","炎","盐","接",
+"折","叶","剑","欠","严","业","点","店","添","甜","念","嫌","跌","贴","碟","协","犯","法","品","林",
+"浸","心","寻","沉","参","针","深","任","金","琴","音","立","集","习","汁","十","入","急","及","吸",
+"单","炭","弹","难","兰","懒","烂","伞","肝","看","岸","汉","汗","安","达","辣","擦","割","渴","扮",
+"办","铲","山","产","间","眼","限","八","扎","杀","班","板","慢","奸","颜","瞎","变","骗","便","棉",
+"面","连","剪","浅","钱","鲜","线","缠","战","扇","善","件","延","别","灭","列","撤","舌","设","热",
+"杰","孽","建","健","言","歇","扁","片","面","典","天","田","垫","年","莲","前","先","肩","见","牵",
+"显","现","烟","憋","篾","铁","捏","节","切","截","结","搬","半","判","盘","满","端","短","断","暖",
+"乱","酸","算","官","宽","欢","完","换","碗","拨","泼","末","脱","夺","阔","活","顽","滑","挖","闩",
+"关","惯","还","还","弯","刷","刮","全","选","转","传","传","砖","船","软","卷","圈","权","圆","院",
+"铅","绝","雪","反","翻","饭","晚","万","劝","原","冤","园","远","发","罚","袜","月","越","县","决",
+"缺","血","吞","根","恨","恩","贫","民","邻","进","亲","新","镇","陈","震","神","身","辰","人","认",
+"紧","银","印","引","笔","匹","密","栗","七","侄","虱","实","失","日","吉","一","筋","劲","勤","近",
+"隐","本","盆","门","墩","嫩","村","寸","蹲","孙","滚","困","婚","魂","温","卒","骨","轮","俊","笋",
+"准","春","唇","顺","纯","闰","均","匀","律","出","橘","分","粉","粪","坟","蚊","问","军","裙","熏",
+"云","运","佛","物","帮","忙","党","汤","糖","浪","仓","钢","糠","薄","摸","托","落","作","索","各",
+"鹤","恶","娘","两","亮","浆","抢","匠","想","像","张","长","装","壮","疮","床","霜","章","厂","唱",
+"伤","尝","上","让","姜","响","向","秧","痒","样","雀","削","着","勺","弱","脚","约","药","光","慌",
+"黄","郭","霍","方","放","纺","房","防","网","筐","狂","王","旺","缚","绑","胖","棒","桩","撞","窗",
+"双","江","讲","降","项","剥","桌","镯","角","壳","学","握","朋","灯","等","凳","藤","能","层","僧",
+"肯","北","墨","得","特","贼","塞","刻","黑","冰","证","秤","绳","剩","升","兴","蝇","逼","力","息",
+"直","侧","测","色","织","食","式","极","国","或","猛","打","冷","生","省","更","梗","坑","硬","行",
+"百","拍","白","拆","择","窄","格","客","额","棚","争","耕","麦","摘","策","隔","兵","柄","平","病",
+"明","命","镜","庆","迎","影","剧","饼","名","领","井","清","静","姓","贞","程","整","正","声","城",
+"轻","赢","积","惜","席","尺","石","益","瓶","钉","顶","厅","听","停","挺","定","零","青","星","经",
+"形","壁","劈","踢","笛","历","锡","击","吃","横","划","兄","荣","永","营","蓬","东","懂","冻","通",
+"桶","痛","铜","动","洞","聋","弄","粽","葱","送","公","孔","烘","红","翁","木","读","鹿","族","谷",
+"哭","屋","冬","统","脓","松","宋","毒","风","丰","凤","梦","中","虫","终","充","宫","穷","熊","雄",
+"福","服","目","六","宿","竹","畜","缩","粥","叔","熟","肉","菊","育","封","蜂","缝","浓","龙","松",
+"重","肿","种","冲","恭","共","凶","拥","容","用","绿","足","烛","赎","属","褥","曲","局","玉","浴"
+];
 
+const PAGE_SIZE = 50;
+const TOTAL_PAGE = 20;
+let currentPage = 1;
 let mediaRecorder = null;
 let audioChunks = [];
-let audioBlob = null;
-let audioUrl = null;
-
-// 音量相关变量
+let stream = null;
 let audioContext = null;
 let analyser = null;
-let dataArray = null;
-let volumeStream = null;
-let isVolumeDetect = false;
+let volumeBar = document.getElementById('volumeBar');
+let rafId = null;
 
-const startBtn = document.getElementById('startBtn');
-const stopBtn = document.getElementById('stopBtn');
-const playBtn = document.getElementById('playBtn');
-const downloadBtn = document.getElementById('downloadBtn');
-const statusText = document.getElementById('status');
-const audioPlay = document.getElementById('audioPlay');
-const volumeBar = document.getElementById('volumeBar');
+const wordContainer = document.getElementById('wordContainer');
+const pageNumEl = document.getElementById('pageNum');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const startRec = document.getElementById('startRec');
+const stopRec = document.getElementById('stopRec');
+const statusEl = document.getElementById('status');
 
-// 更新横向音量条
-function updateVolumeBar() {
-    if (!isVolumeDetect || !analyser) {
-        volumeBar.style.width = '0%';
-        return;
-    }
-    analyser.getByteFrequencyData(dataArray);
-    let sum = 0;
-    for (let val of dataArray) sum += val;
-    const avg = sum / dataArray.length;
-    const percent = (avg / 255) * 100;
+// 渲染页面文字
+function renderPage(page) {
+  const start = (page - 1) * PAGE_SIZE;
+  const end = start + PAGE_SIZE;
+  const pageWords = allWords.slice(start, end);
+  wordContainer.innerText = pageWords.join("  ");
+  pageNumEl.textContent = page.toString().padStart(2, '0');
 
-    volumeBar.style.width = percent + '%';
-    // 音量变色：绿→黄→红
-    if (percent < 30) {
-        volumeBar.style.background = '#28a745';
-    } else if (percent < 70) {
-        volumeBar.style.background = '#ffc107';
-    } else {
-        volumeBar.style.background = '#dc3545';
-    }
-
-    requestAnimationFrame(updateVolumeBar);
+  prevBtn.disabled = page <= 1;
+  nextBtn.disabled = page >= TOTAL_PAGE;
 }
 
-// 初始化音量监听
-function initVolumeAnalyser(stream) {
-    volumeStream = stream;
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+// 重置音量条
+function resetVolume() {
+  volumeBar.style.width = "0%";
+  if(rafId) cancelAnimationFrame(rafId);
+}
+
+// 实时音量可视化
+function drawVolume() {
+  if(!analyser) return;
+  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(dataArray);
+  let sum = 0;
+  for(let val of dataArray) sum += val;
+  let avg = sum / dataArray.length;
+  let percent = Math.min(100, (avg / 128) * 100);
+  volumeBar.style.width = percent + "%";
+  rafId = requestAnimationFrame(drawVolume);
+}
+
+// 初始化页面
+renderPage(currentPage);
+resetVolume();
+
+// 上一页
+prevBtn.addEventListener('click', () => {
+  if(currentPage > 1){
+    currentPage--;
+    renderPage(currentPage);
+    statusEl.textContent = "就绪";
+    resetVolume();
+  }
+});
+
+// 下一页
+nextBtn.addEventListener('click', () => {
+  if(currentPage < TOTAL_PAGE){
+    currentPage++;
+    renderPage(currentPage);
+    statusEl.textContent = "就绪";
+    resetVolume();
+  }
+});
+
+// 开始录音（固定 44100Hz）
+startRec.addEventListener('click', async () => {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    resetVolume();
+
+    // 强制设置采样率 44100 Hz
+    if(!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)({
+        sampleRate: 44100
+      });
+    }
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 256;
-    const bufferLen = analyser.frequencyBinCount;
-    dataArray = new Uint8Array(bufferLen);
-
     const source = audioContext.createMediaStreamSource(stream);
     source.connect(analyser);
-    isVolumeDetect = true;
-    updateVolumeBar();
-}
+    drawVolume();
 
-// 关闭音量监听
-function closeVolumeAnalyser() {
-    isVolumeDetect = false;
-    if (volumeStream) volumeStream.getTracks().forEach(t => t.stop());
-    if (audioContext) audioContext.close();
-    volumeBar.style.width = '0%';
-}
+    mediaRecorder.ondataavailable = e => {
+      if(e.data.size > 0) audioChunks.push(e.data);
+    };
 
-// 申请麦克风权限 + 初始化录音
-async function initRecord() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                sampleRate: CONFIG.sampleRate,
-                channelCount: CONFIG.channelCount
-            }
-        });
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(audioChunks, { type: 'audio/wav' });
+      const url = URL.createObjectURL(blob);
+      const fileName = currentPage.toString().padStart(2, '0') + ".wav";
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
 
-        // 启动音量检测
-        initVolumeAnalyser(stream);
+      stream.getTracks().forEach(track => track.stop());
+      resetVolume();
+      statusEl.textContent = `录音完成，已下载 ${fileName}`;
+      startRec.disabled = false;
+      stopRec.disabled = true;
+    };
 
-        mediaRecorder = new MediaRecorder(stream, {
-            mimeType: 'audio/webm'
-        });
-        audioChunks = [];
-
-        mediaRecorder.ondataavailable = e => {
-            if (e.data.size > 0) audioChunks.push(e.data);
-        };
-
-        mediaRecorder.onstop = async () => {
-    statusText.innerText = "状态：录音结束，正在处理WAV文件...";
-    const blob = new Blob(audioChunks, { type: 'audio/webm' });
-    audioBlob = await convertToWav(blob);
-    audioUrl = URL.createObjectURL(audioBlob);
-    audioPlay.src = audioUrl;
-
-    playBtn.disabled = false;
-    downloadBtn.disabled = false;
-    statusText.innerText = "状态：录音完成，正在上传文件...";
-
-    // 自动上传到你的GitHub仓库
-    await uploadToGitHub(audioBlob);
-
-    statusText.innerText = "状态：录音完成，文件已自动上传！";
-};
-
-// 新增：上传文件到GitHub的函数
-async function uploadToGitHub(blob) {
-    const username = "heihei-lan"; // 你的GitHub用户名
-    const repo = "yuliaorecord";   // 你的仓库名
-    const token = "你的GitHub Token"; // 你刚才生成的token
-    const fileName = "recording_" + new Date().getTime() + ".wav"; // 自动生成文件名
-
-    // Blob转Base64
-    const reader = new FileReader();
-    reader.readAsDataURL(blob);
-    await new Promise(resolve => reader.onload = resolve);
-    const base64Data = reader.result.split(',')[1];
-
-    const url = `https://api.github.com/repos/${username}/${repo}/contents/${fileName}`;
-    const response = await fetch(url, {
-        method: "PUT",
-        headers: {
-            "Authorization": `token ${token}`,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            message: `Add recording ${fileName}`,
-            content: base64Data
-        })
-    });
-
-    if (response.ok) {
-        console.log("文件上传成功！");
-    } else {
-        console.error("文件上传失败：", await response.json());
-        statusText.innerText = "状态：上传失败，请手动下载文件";
-    }
-};
-
-        mediaRecorder.start();
-        statusText.innerText = "状态：正在录音...";
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        playBtn.disabled = true;
-        downloadBtn.disabled = true;
-
-    } catch (err) {
-        statusText.innerText = "错误：无法获取麦克风权限，请允许麦克风访问！";
-        console.error(err);
-    }
-}
+    mediaRecorder.start();
+    statusEl.textContent = "正在录音...";
+    startRec.disabled = true;
+    stopRec.disabled = false;
+  } catch (err) {
+    statusEl.textContent = "麦克风权限被拒绝，请允许麦克风权限";
+    console.error(err);
+  }
+});
 
 // 停止录音
-function stopRecord() {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
-        mediaRecorder.stream.getTracks().forEach(track => track.stop());
-    }
-    // 关闭音量监听
-    closeVolumeAnalyser();
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-}
-
-// 回放
-function playAudio() {
-    audioPlay.currentTime = 0;
-    audioPlay.play();
-}
-
-// 下载标准WAV文件
-function downloadWav() {
-    if (!audioBlob) return;
-    const a = document.createElement('a');
-    a.href = audioUrl;
-    a.download = "单字音录音_"+new Date().getTime()+".wav";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-}
-
-// 转码为 44100Hz 16bit 单声道 WAV
-async function convertToWav(blob) {
-    const arrayBuffer = await blob.arrayBuffer();
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-        sampleRate: CONFIG.sampleRate
-    });
-    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-
-    const targetSampleRate = CONFIG.sampleRate;
-    const targetChannels = CONFIG.channelCount;
-    const targetBit = CONFIG.sampleSize;
-
-    const floatData = audioBuffer.getChannelData(0);
-    const length = floatData.length;
-    const byteRate = targetSampleRate * targetChannels * (targetBit / 8);
-    const blockAlign = targetChannels * (targetBit / 8);
-
-    const wavBuffer = new ArrayBuffer(44 + length * 2);
-    const view = new DataView(wavBuffer);
-
-    // RIFF 头部
-    view.setUint8(0, 0x52);view.setUint8(1, 0x49);view.setUint8(2, 0x46);view.setUint8(3, 0x46);
-    view.setUint32(4, 36 + length * 2, true);
-    view.setUint8(8, 0x57);view.setUint8(9, 0x41);view.setUint8(10, 0x56);view.setUint8(11, 0x45);
-    // fmt 块
-    view.setUint8(12, 0x66);view.setUint8(13, 0x6D);view.setUint8(14, 0x74);view.setUint8(15, 0x20);
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, targetChannels, true);
-    view.setUint32(24, targetSampleRate, true);
-    view.setUint32(28, byteRate, true);
-    view.setUint16(32, blockAlign, true);
-    view.setUint16(34, targetBit, true);
-    // data 块
-    view.setUint8(36, 0x64);view.setUint8(37, 0x61);view.setUint8(38, 0x74);view.setUint8(39, 0x61);
-    view.setUint32(40, length * 2, true);
-
-    // 浮点转16bit整型
-    let offset = 44;
-    for (let i = 0; i < length; i++) {
-        let sample = Math.max(-1, Math.min(1, floatData[i]));
-        sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
-        view.setInt16(offset, sample, true);
-        offset += 2;
-    }
-
-    return new Blob([wavBuffer], { type: 'audio/wav' });
-}
-
-// 绑定按钮事件
-startBtn.addEventListener('click', initRecord);
-stopBtn.addEventListener('click', stopRecord);
-playBtn.addEventListener('click', playAudio);
-downloadBtn.addEventListener('click', downloadWav);
+stopRec.addEventListener('click', () => {
+  if(mediaRecorder && mediaRecorder.state === "recording"){
+    mediaRecorder.stop();
+  }
+});
 </script>
+
 </body>
 </html>
